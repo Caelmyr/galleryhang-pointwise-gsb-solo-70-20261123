@@ -40,36 +40,71 @@ export function installationCompare() {
   },{wide:true,confirm:'Compare installation'});
 }
 
-export function surveyOutline(after) {
+const hiddenOptions=[['none','All four corners visible'],['top-left','Top left hidden'],['top-right','Top right hidden'],
+                     ['bottom-right','Bottom right hidden'],['bottom-left','Bottom left hidden']];
+
+export function surveyOutline(after,target=null) {
   const available=wall().shots;
+  if (!available.length) throw new Error('Import the installation photograph first.');
   const initial=available.find(item=>item.id===state.shotId&&item.role==='inspection') || available.find(item=>item.role==='inspection') || available[0];
-  const values=choice('shot','Choose the installed photograph',initial.id,available.map(item=>[item.id,item.name]));
+  const values=choice('shot',target?'Choose the re-shoot photograph':'Choose the installed photograph',initial.id,available.map(item=>[item.id,item.name]))+
+    (target?`<p class="small">Reading for <strong>${e(target.title)}</strong>. Mark all four corners on the re-shoot so the original estimate and this observation can be compared.</p>`:
+      choice('blocked','Which corner is hidden','none',hiddenOptions));
   openDialog('Measure installed artwork',values,async fields=>{
     const selected=available.find(s=>s.id===fields.shot);
-    installedCorners(selected,after);
+    installedCorners(selected,after,{check:target,blocked:target?'none':fields.blocked});
     return false;
   },{confirm:'Open photograph'});
 }
 
-function installedCorners(selected,after) {
+function installedCorners(selected,after,{check=null,blocked='none'}={}) {
   const active=layout();
   const placements=[['','Observed outline only'],...active.placements.map(p=>[p.id,art(p.artwork).title])];
-  const controls=choice('placement','Expected work',active.placements[0]?.id || '',placements)+required('title','Check name','Installed position')+
+  const controls=check?
+    `<p class="small">Adding a reading to <strong>${e(check.title)}</strong>. The original estimated corners and measurements stay in the check.</p>`+longText('note','Reading notes','',500):
+    choice('placement','Expected work',active.placements[0]?.id || '',placements)+required('title','Check name','Installed position')+
     choice('condition','Survey stage','as installed',['as installed','after adjustment','reference check'])+
     numeric('center_tolerance','Center tolerance in mm',20,{min:1,max:500})+numeric('angle_tolerance','Rotation tolerance in degrees',1,{min:.1,max:20})+
     numeric('size_tolerance','Outside size tolerance in mm',20,{min:1,max:350})+longText('note','Notes','',650);
-  imagePicker('Mark installed artwork outline',photo(selected.photo.preview_digest),'Mark the visible frame in the installation photo. Start upper left and select the remaining corners clockwise.',[],4,controls,async (corners,fields)=>{
-    await change(lurl('/surveys'),{...fields,corners,shot:selected.id});
+  const limit=blocked==='none'?4:3;
+  const description=blocked==='none'
+    ? 'Mark the four artwork corners clockwise from the upper left.'
+    : `Mark the three visible corners clockwise, skipping the hidden ${blocked.replace('-',' ')}. The registered frame width and height supply a right-angled estimate for the missing corner; the two observed sides are matched as closely as a square corner allows.`;
+  imagePicker('Mark installed artwork outline',photo(selected.photo.preview_digest),description,[],limit,controls,async (corners,fields)=>{
+    if (blocked!=='none' && !fields.placement) throw new Error('Choose the planned artwork so its registered width and height can complete the hidden corner.');
+    const body={...fields,corners,shot:selected.id,blocked_corner:blocked};
+    if (check) body.check=check.id;
+    await change(lurl('/surveys'),body);
     state.review='survey';
     await after();
   },{confirm:'Save measured outline'});
 }
 
-export function surveyPicture(id) {
+function savedReadings(check) {
+  if (check.readings?.length) return check.readings;
+  return [{id:check.id,index:1,kind:'four corner observation',shot:check.shot,photo_corners:check.photo_corners,
+           corner_indices:[0,1,2,3],blocked_corner:null,observed:check.observed,expected:check.expected,geometry:null}];
+}
+
+export function surveyPicture(id,readingId=null) {
   const found=layout().installed_surveys.find(row=>row.id===id);
   if (!found) throw new Error('The installed outline was not found.');
-  const image=lurl(`/surveys/${id}/preview.png?revision=${state.project.revision}`);
-  openDialog(found.title,`<img src="${e(image)}" alt="Observed and predicted outline on the installation photograph"><p>${e(found.conclusion.status)}</p>${table(['Quantity','Recorded value'],[['Observed center',found.observed.center.join(', ')+' mm'],['Observed dimensions',`${qty(found.observed.width)} × ${qty(found.observed.height)} mm`],['Rotation',qty(found.observed.angle,'°')]])}<div class="toolline">${btn('Remove measured outline','delete-survey',{id},'danger')}</div>`,null,{simple:true,wide:true});
+  const readings=savedReadings(found);
+  const image=lurl(`/surveys/${id}/preview.png?revision=${state.project.revision}${readingId?`&reading=${encodeURIComponent(readingId)}`:''}`);
+  const rows=readings.map(row=>[{html:btn(`Reading ${row.index}${row.id===readingId?' · shown':''}`,'survey-reading',{id,reading:row.id})},
+    row.kind,row.blocked_corner?`${row.blocked_corner} estimated`:'four corners',row.observed.center.map(v=>qty(v)).join(', ')+' mm',
+    `${qty(row.observed.width)} × ${qty(row.observed.height)} mm`,row.shot===shot()?.id?'This view':'Other view']);
+  const shown=readings.find(row=>row.id===readingId) || readings.at(-1);
+  const geometry=shown?.geometry;
+  const inferred=geometry?`<p class="small">${e(geometry.hidden_corner)} hidden: anchored ${e(geometry.anchored_edges.join(' and '))}, estimated ${e(geometry.inferred_edges.join(' and '))}. The two photographed sides meet at ${qty(geometry.adjacent_sides_deg,'°')}; the estimated hidden corner moves ${qty(geometry.hidden_corner_spread_mm,'mm')} between hugging the first or second observed side.</p>`:'';
+  const first=readings[0],last=readings.at(-1);
+  const comparison=readings.length>1?table(['First reading → latest','Value'],[
+    ['Basis',`${first.kind} → ${last.kind}`],
+    ['Center move',qty(Math.hypot(last.observed.center[0]-first.observed.center[0],last.observed.center[1]-first.observed.center[1]),'mm')],
+    ['Width change',qty(last.observed.width-first.observed.width,'mm')],
+    ['Height change',qty(last.observed.height-first.observed.height,'mm')],
+    ['Rotation change',qty(last.observed.angle-first.observed.angle,'°')]]):'';
+  openDialog(found.title,`<img src="${e(image)}" alt="Observed and estimated outline on the installation photograph"><p>${e(found.conclusion.status)}</p>${table(['Reading','Basis','Hidden corner','Observed center','Observed size','View'],rows,'No readings saved yet.')}${inferred}${comparison}<div class="toolline">${btn('Add re-shoot reading','survey-reshoot',{id},'primary')}${btn('Remove measured outline','delete-survey',{id},'danger')}</div>`,null,{simple:true,wide:true});
 }
 
 export function visitRoute(id,after) {

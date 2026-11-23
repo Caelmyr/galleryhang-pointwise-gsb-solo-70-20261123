@@ -55,7 +55,7 @@ def register_additional(api,store):
     def preview_survey(project_id,layout_id,survey_id):
         current = scene(project_id,layout_id)
         record = find(current.layout.get('installed_surveys',[]),survey_id,'Installed outline')
-        return image_response(survey_picture(store.blobs,current,record))
+        return image_response(survey_picture(store.blobs,current,record,request.args.get('reading')))
 
     @api.post('/projects/<project_id>/layouts/<layout_id>/routes')
     @api.route('/projects/<project_id>/layouts/<layout_id>/routes/<route_id>',methods=['PATCH','DELETE'])

@@ -97,11 +97,16 @@ def delete_shot(project, wall_id, shot_id):
     if any(obs['shot']==shot_id for layout in project['layouts'] if layout['wall']==wall_id
            for obs in layout['observations']):
         raise InputError('Remove working observations tied to this view before removing it.')
-    if any(survey['shot']==shot_id for layout in project['layouts'] if layout['wall']==wall_id
+    if any(survey_uses_shot(survey,shot_id) for layout in project['layouts'] if layout['wall']==wall_id
            for survey in layout.get('installed_surveys',[])):
         raise InputError('Remove the measured outlines tied to this view before removing it.')
     wall['shots'].remove(target)
     return shot_id, f"Removed site view {target['name']}"
+
+
+def survey_uses_shot(survey,shot_id):
+    readings = survey.get('readings') or [survey]
+    return any(reading.get('shot')==shot_id for reading in readings)
 
 
 def edit_wall_annotation(project, wall_id, kind, payload, identifier=None):

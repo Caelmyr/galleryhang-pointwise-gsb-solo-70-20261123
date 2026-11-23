@@ -122,7 +122,13 @@ function distributionReadout(report) {
   return metrics([['Artwork coverage',percent(report.artwork_coverage_fraction)],['Overlap',percent(report.overlap_fraction)],['Eye line',qty(report.eye_level_mm,'mm')]])+table(['Artwork','Area overlapping'],report.works.map(row=>[row.name,percent(row.overlap_fraction)]),'Place artworks to measure their distribution.');
 }
 function surveyReadout(response) {
-  return metrics([['Observed outlines',response.count],['Needs review',response.review_count]])+table(['Artwork','State','Observed center','Recorded view'],response.checks.map(row=>[{html:btn(row.title,'survey-picture',{id:row.id})},row.conclusion.status,row.observed.center.map(v=>qty(v)).join(', ')+' mm',row.current_source]),'Mark a work’s four visible corners on an installation photograph to check placement.');
+  const rows=response.checks.flatMap(row=>row.readings.map(reading=>[
+    {html:btn(`${row.title} · reading ${reading.index}`,'survey-reading',{id:row.id,reading:reading.id})},
+    reading.kind,reading.blocked_corner?`${reading.blocked_corner} estimated`:'four corners',
+    reading.observed.center.map(v=>qty(v)).join(', ')+' mm',reading.current_source]));
+  const count=response.checks.reduce((sum,row)=>sum+row.reading_count,0);
+  return metrics([['Installed checks',response.count],['Readings',count],['Needs review',response.review_count]])+
+    table(['Artwork','Basis','Hidden corner','Observed center','View'],rows,'Mark an artwork’s visible corners on an installation photograph to check placement. Mark three corners when one is hidden; the registered frame supplies a right-angled estimate.');
 }
 
 export function reviewPanel() {
