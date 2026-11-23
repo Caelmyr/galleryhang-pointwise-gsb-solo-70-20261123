@@ -4,6 +4,7 @@ import {arrangement,artDialog,artPreview,calibrateView,confirmDelete,cropArtwork
         foregroundView,labelDialog,layoutComparison,layoutDialog,layoutOptions,markDialog,obstacleDialog,
         paintSample,photoRuler,pickArtwork,placementDialog,shotDialog,stationDialog,wallDialog} from './editing.js';
 import {addObservation,colorsDialog,compareIssuedGeometry,comparePhotos,contactSheetDialog,installationCompare,issueDialog,printLabels,surveyOutline,surveyPicture,verifyIssue,visitRoute,wallObservations} from './review.js';
+import {identificationView,identifyDialog,showIdentificationResult} from './identify.js';
 
 const root=document.querySelector('#page');
 const dialog=document.querySelector('#dialog');
@@ -127,6 +128,12 @@ const actions={
   'survey-picture':({id})=>surveyPicture(id), 'delete-survey':({id})=>confirmDelete('the measured outline',lurl(`/surveys/${id}`),refresh),
   palette:()=>{ensure(state.project.artworks.length,'Add at least one artwork first.');colorsDialog();},
   'contact-sheet':()=>{ensure(state.project.artworks.length,'Add at least one artwork first.');contactSheetDialog();},
+  identify:()=>{ensure(state.project.artworks.length>=2,'Register at least two candidate artworks first.');identifyDialog();},
+  'identification-view':({id})=>identificationView(id),
+  'identification-candidate':({id,art})=>identificationView(id,art),
+  'identification-resume':({id})=>{const record=(state.project.identifications||[]).find(row=>row.id===id);if(record)showIdentificationResult(record);},
+  'confirm-identification':async({id,art:choice})=>{await change(purl(`/identifications/${id}/confirm`),{choice});dialog.close();await refresh();},
+  'discard-identification':({id})=>confirmDelete('this identification',purl(`/identifications/${id}`),refresh),
   'new-issue':()=>issueDialog(async()=>{activePage('issues');await refresh();}), 'verify-issue':()=>verifyIssue(), 'compare-issues':()=>compareIssuedGeometry(),
 };
 

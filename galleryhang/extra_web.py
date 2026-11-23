@@ -4,10 +4,15 @@ from io import BytesIO
 from .capture_review import observation_report
 from .catalog import catalog_index, contact_sheet, palette_card, palette_sheet
 from .distribution import distribution_report, elevate_distribution
+from .identify import (
+    add_identification, confirm_identification, delete_identification, identification_detail,
+    identification_match_image, identification_photo_image,
+)
 from .layout import Scene
 from .label_print import PAPER_FORMATS, print_plan, print_wall_labels
 from .lightmap import illumination_picture, lighting_metrics, line_probe, registered_illumination
-from .model import InputError, find, pair, parse_revision
+from .model import InputError, MAX_UPLOAD, find, new_id, pair, parse_revision, token
+from .photos import store_capture
 from .revisions import compare_issues
 from .print_target import print_mount_card
 from .survey import delete_survey, save_survey, survey_picture, survey_report
@@ -16,7 +21,7 @@ from .tour import draw_tour, edit_route, remove_route, tour_report
 
 def register_additional(api,store):
     from .web import (erase, image_response, json_payload, limit_image_work, mutate,
-                      query_choice, query_number, respond_change, wall_shot)
+                      query_choice, query_number, respond_change, upload_form, wall_shot)
 
     def scene(project_id,layout_id):
         return Scene.build(store.get(project_id),layout_id)
@@ -133,6 +138,50 @@ def register_additional(api,store):
         first = store.snapshot(project_id,first_id)
         second = store.snapshot(project_id,second_id)
         return jsonify(compare_issues(first,second))
+
+    @api.post('/projects/<project_id>/identify/photo')
+    @limit_image_work
+    def identify_photo_upload(project_id):
+        store.get(project_id)
+        _,data,filename = upload_form(MAX_UPLOAD)
+        photo = store_capture(store.blobs,data,'identification',filename,'',new_id())
+        return jsonify(photo=photo),201
+
+    @api.post('/projects/<project_id>/identifications')
+    @limit_image_work
+    def create_identification(project_id):
+        return mutate(store,project_id,
+                      lambda project,payload:add_identification(store.blobs,project,payload),
+                      'identification',created=True)
+
+    @api.post('/projects/<project_id>/identifications/<identification_id>/confirm')
+    def confirm_identification_route(project_id,identification_id):
+        return mutate(store,project_id,confirm_identification,'identification',identification_id)
+
+    @api.delete('/projects/<project_id>/identifications/<identification_id>')
+    def remove_identification(project_id,identification_id):
+        return erase(store,project_id,delete_identification,'identification',identification_id)
+
+    @api.get('/projects/<project_id>/identifications/<identification_id>')
+    def identification_readout(project_id,identification_id):
+        project = store.get(project_id)
+        record = find(project.get('identifications',[]),identification_id,'Site identification')
+        return jsonify(identification_detail(project,record))
+
+    @api.get('/projects/<project_id>/identifications/<identification_id>/photo.png')
+    @limit_image_work
+    def identification_photo_render(project_id,identification_id):
+        project = store.get(project_id)
+        record = find(project.get('identifications',[]),identification_id,'Site identification')
+        return image_response(identification_photo_image(store.blobs,record))
+
+    @api.get('/projects/<project_id>/identifications/<identification_id>/match.png')
+    @limit_image_work
+    def identification_match_render(project_id,identification_id):
+        project = store.get(project_id)
+        record = find(project.get('identifications',[]),identification_id,'Site identification')
+        artwork_id = token(request.args.get('artwork'),'Candidate artwork')
+        return image_response(identification_match_image(store.blobs,project,record,artwork_id))
 
     @api.get('/projects/<project_id>/walls/<wall_id>/shots/<shot_id>/lighting')
     @api.get('/projects/<project_id>/walls/<wall_id>/shots/<shot_id>/lighting.png')

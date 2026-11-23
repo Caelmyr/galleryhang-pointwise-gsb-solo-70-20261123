@@ -170,6 +170,8 @@ def delete_artwork(project, artwork_id):
     row = find(project['artworks'],artwork_id,'Artwork')
     if any(p['artwork']==artwork_id for layout in project['layouts'] for p in layout['placements']):
         raise InputError('Remove placements of this artwork before removing it from the catalog.')
+    if any(record.get('choice')==artwork_id for record in project.get('identifications',[])):
+        raise InputError('Remove the saved site identifications for this artwork before removing it.')
     project['artworks'].remove(row)
     return artwork_id, f"Removed artwork {row['title']}"
 

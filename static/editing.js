@@ -1,4 +1,4 @@
-import {state,e,photo,purl,lurl,wurl,surl,layout,wall,shot,art,placed,qty,opts,btn,link,tag,table,
+import {state,e,photo,purl,lurl,wurl,surl,layout,wall,shot,art,placed,qty,opts,btn,link,tag,table,shortDate,
         field,numeric,change,request,applyProject,openDialog,collectImagePoints,notify} from './ui.js';
 
 const filetypes = 'image/png,image/jpeg,image/webp,image/tiff,.tiff,.tif';
@@ -180,7 +180,9 @@ export async function artPreview(id) {
   const path=purl(`/artworks/${id}`);
   const info=await request(path+'/info');
   const report=info.crop;
-  openDialog(work.title,`<div class="review-layout"><div><img src="${e(path+'/print.png?kind=frame')}" alt="Framed artwork from the active crop"></div><div><p>${e(work.artist)}</p>${table(['Measurement','Value'],[['Cropped image',report.cropped_size_pixels.join(' × ')+' px'],['Mat opening',report.opening_size_mm.join(' × ')+' mm'],['Aspect fit',qty(report.aspect_fit_percent,'%')],['Source density',qty(report.source_width_mm_pixel_density,'px/mm')]])}<div class="toolline">${btn('Edit crop','crop',{id})}${link('Download crop',path+'/print.png?kind=crop&download=1')}${link('Frame-back measuring card',path+'/measuring-card.pdf')}</div></div></div>`,null,{simple:true,wide:true});
+  const saved=(state.project.identifications||[]).filter(record=>record.status==='confirmed' && record.choice===id);
+  const identifications=saved.length?`<hr class="dialog-separator"><h3>Site identifications</h3><p class="small">Confirmed matches from on-site photographs. The stored match region stays fixed when the display crop changes.</p><div class="place-list">${saved.map(record=>`<button class="place" type="button" data-do="identification-view" data-id="${e(record.id)}"><b>${e(record.name)}</b><span>${e(shortDate(record.created))}</span></button>`).join('')}</div>`:'';
+  openDialog(work.title,`<div class="review-layout"><div><img src="${e(path+'/print.png?kind=frame')}" alt="Framed artwork from the active crop"></div><div><p>${e(work.artist)}</p>${table(['Measurement','Value'],[['Cropped image',report.cropped_size_pixels.join(' × ')+' px'],['Mat opening',report.opening_size_mm.join(' × ')+' mm'],['Aspect fit',qty(report.aspect_fit_percent,'%')],['Source density',qty(report.source_width_mm_pixel_density,'px/mm')]])}<div class="toolline">${btn('Edit crop','crop',{id})}${link('Download crop',path+'/print.png?kind=crop&download=1')}${link('Frame-back measuring card',path+'/measuring-card.pdf')}</div></div></div>${identifications}`,null,{simple:true,wide:true});
 }
 
 export function calibrateView(id,after) {

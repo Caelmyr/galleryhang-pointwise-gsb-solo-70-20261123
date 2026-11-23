@@ -27,6 +27,7 @@ MAX_SHOTS = 8
 MAX_OBSTACLES = 30
 MAX_STATIONS = 12
 MAX_SWATCHES = 12
+MAX_IDENTIFICATIONS = 40
 
 ID_PATTERN = re.compile(r'[0-9a-f]{16}\Z')
 DIGEST_PATTERN = re.compile(r'[0-9a-f]{64}\Z')
@@ -199,6 +200,7 @@ def new_project(payload):
         'walls': [],
         'artworks': [],
         'layouts': [],
+        'identifications': [],
         'synthetic': False,
     }
 

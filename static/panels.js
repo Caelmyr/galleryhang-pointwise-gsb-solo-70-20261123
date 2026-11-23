@@ -1,5 +1,6 @@
 import {state,e,photo,purl,lurl,wurl,surl,layout,wall,shot,art,station,route,placed,qty,percent,shortDate,
         opts,choices,attr,btn,link,headline,panel,empty,tag,table,metrics,facts,segment,loadInside} from './ui.js';
+import {identificationListSection} from './identify.js';
 
 const sections = [['plan','▤','Wall plan'],['sites','◇','Site photographs'],['artworks','▧','Artworks'],
                   ['view','◉','Viewing positions'],['review','⊞','Checks'],['issues','▣','Issues']];
@@ -81,8 +82,8 @@ export function planPanel() {
 
 export function artworksPanel() {
   const works = state.project.artworks;
-  const actions = btn('Compare colors','palette')+btn('Contact sheet','contact-sheet')+btn('Add artwork','add-art',{},'primary');
-  return `<div class="workspace">${headline('Artwork library',`${works.length} registered artworks`,actions)}${works.length?`<div class="art-grid">${works.map(item=>artCard(item)).join('')}</div>`:empty('Add a work with its artwork photograph and measured outside size.',btn('Add artwork','add-art',{},'primary'))}</div>`;
+  const actions = btn('Compare colors','palette')+btn('Contact sheet','contact-sheet')+btn('Identify from photo','identify')+btn('Add artwork','add-art',{},'primary');
+  return `<div class="workspace">${headline('Artwork library',`${works.length} registered artworks`,actions)}${works.length?`<div class="art-grid">${works.map(item=>artCard(item)).join('')}</div>`:empty('Add a work with its artwork photograph and measured outside size.',btn('Add artwork','add-art',{},'primary'))}${identificationListSection()}</div>`;
 }
 
 function shotCard(shotItem,index) {
