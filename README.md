@@ -1,0 +1,20 @@
+# GalleryHang
+
+GalleryHang turns a site photograph and a measured wall into a working exhibition layout. It keeps original artwork and wall photographs, the measured coordinates used by the layout, and the downloaded files from every saved issue in a local library.
+
+## Start
+
+Run `docker compose up --build --wait` and open `http://127.0.0.1:19993`. Set `GALLERYHANG_PORT` to use a different local port. `docker compose stop` stops the application and retains its named volume. For a native Python 3.11 installation, install `requirements.txt` and run `./start.sh`. The native server defaults to `http://127.0.0.1:8000` and stores data in `.galleryhang`. Set `GALLERYHANG_DATA` to use a different native data directory.
+
+## Plan and issue a gallery wall
+
+1. Open **North Window Study**, the synthetic sample, or create an exhibition and add a measured wall. Use measured millimetres from the finished floor and left edge. A datum gives the installation drawing an additional point of reference.
+2. Add site photographs and mark four ordered corners on their wall planes. Select the foreground outlines that should cover the simulated artworks. Inspect rectified support, clipping and detail, measure a line, or record light and paint-sample readings for the site view.
+3. Register artworks with a photograph, outside frame size, and available fixing measurements. Mark a perspective crop for a photographed piece. Review the frame and mat rendering, create a contact sheet, or compare cropped artwork colors.
+4. Place artwork on the wall using the object's physical center. Use the measured elevation or a site photograph, align or space a selection, pin a position, and make an alternative working layout. Add the desired label copy and backing material.
+5. Check obstacle clearance, balance across the wall, measured fixing marks and label fit. Use saved eye heights and distances to view the hang from floor positions and combine those positions into a visit sequence. Mark observed outlines on a separate installed photograph to compare measured and planned positions.
+6. Save an installer issue to keep an elevation, montage, measured fixing diagram, clearances, PDF, CSV and downloadable ZIP. A client proof contains the preview and the shorter PDF. Verify a received ZIP from **Issues**. Compare two saved issues from the same wall to see which object positions or formats changed. Unzip an issue before opening its linked HTML handover.
+
+Plan display, fixture checks, and the attachment measurements are based on a wall plane. Art frame thickness and fixture depth are simple preview estimates. The fixing diagram requires independently measured backing hardware and onsite confirmation. Projected images, clearance maps, camera-dependent color readings, and sampled visibility describe only the measured views. The current app supports still PNG, JPEG, WebP and TIFF up to 12 megapixels and 24 MiB, up to 12 walls, 80 registered artwork images, 18 layouts, and 50 placements per layout. The app serves one local exhibition library. The label PDF uses European and Latin glyphs available in the local font. Printing physical templates at actual size requires checking the supplied calibration line on the resulting page.
+
+Capture decoding and the projective sampling approach reuse the local image workbench libraries. The wall placement, field measurements, floor positions and saved issue formats are specific to GalleryHang. Use `python3 scripts/count_backend.py --project-root . --source-root galleryhang --output /tmp/galleryhang-count.json` to recount the Python backend.

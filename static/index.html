@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#252720">
+  <title>GalleryHang · Exhibition studio</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+  <a class="skip" href="#page">Skip to workspace</a>
+  <header class="topbar">
+    <button class="brand" data-do="library" type="button" aria-label="GalleryHang exhibitions">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i></span><span>GalleryHang</span>
+    </button>
+    <span id="top-project" class="top-project"></span>
+    <div class="top-actions">
+      <span class="local"><i></i> Local studio</span>
+      <button class="button subdued top-button" type="button" data-do="new-project">New exhibition</button>
+    </div>
+  </header>
+  <div id="app" class="app">
+    <aside id="navigation" class="navigation" aria-label="Workspace"></aside>
+    <main id="page" tabindex="-1"></main>
+  </div>
+  <dialog id="dialog"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="/static/main.js"></script>
+</body>
+</html>
