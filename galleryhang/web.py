@@ -131,8 +131,12 @@ def edge_size(default=1350):
 
 
 def respond_change(result,status=200):
-    project,item = result
-    return jsonify(project=project,item=item),status
+    project,item = result[0],result[1]
+    extra = result[2] if len(result) > 2 else None
+    payload = {'project':project,'item':item}
+    if extra is not None:
+        payload['follow'] = extra
+    return jsonify(payload),status
 
 
 def mutate(store,project_id,operation,label,*args,created=False):
@@ -329,11 +333,25 @@ def register_layout_state(api,store):
     def edit_placement_route(project_id,layout_id,placement_id):
         if request.method=='DELETE':
             return erase(store,project_id,delete_placement,'placement',layout_id,placement_id)
-        return mutate(store,project_id,edit_placement,'placement',layout_id,placement_id)
+        payload = json_payload()
+        captured = {}
+        def apply(project):
+            item, message, follow = edit_placement(project,layout_id,placement_id,payload)
+            captured['follow'] = follow
+            return item, message
+        result = store.update(project_id,parse_revision(payload),apply,'placement')
+        return jsonify(project=result[0],item=result[1],follow=captured['follow']),200
 
     @api.post('/projects/<project_id>/layouts/<layout_id>/arrange')
     def arrange_route(project_id,layout_id):
-        return mutate(store,project_id,apply_arrangement,'arrangement',layout_id)
+        payload = json_payload()
+        captured = {}
+        def apply(project):
+            layout_row, message, follow = apply_arrangement(project,layout_id,payload)
+            captured['follow'] = follow
+            return layout_row, message
+        result = store.update(project_id,parse_revision(payload),apply,'arrangement')
+        return jsonify(project=result[0],item=result[1],follow=captured['follow']),200
 
     @api.post('/projects/<project_id>/layouts/<layout_id>/labels')
     @api.route('/projects/<project_id>/layouts/<layout_id>/labels/<label_id>',methods=['DELETE','PATCH'])

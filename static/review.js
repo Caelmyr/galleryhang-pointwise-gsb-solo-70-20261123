@@ -1,5 +1,5 @@
-import {state,e,photo,purl,lurl,wurl,layout,wall,shot,art,qty,percent,opts,choices,btn,link,tag,table,metrics,
-        field,numeric,request,change,openDialog,notify} from './ui.js';
+import {state,e,photo,purl,lurl,wurl,layout,wall,shot,art,qty,percent,choices,btn,link,tag,table,metrics,facts,
+        field,numeric,request,change,applyProject,openDialog,notify} from './ui.js';
 import {imagePicker} from './editing.js';
 
 const choice = (name,label,value,options) => field(name,label,value,{type:'select',options});
@@ -170,6 +170,75 @@ export function printLabels() {
     return false;
   },{confirm:'Check print layout'});
 }
+
+function cardBlock(option) {
+  const leg=option.legibility;
+  const blocked=option.collision.blocked;
+  const blockerRows=blocked
+    ? option.collision.blockers.map(b=>[b.name,b.reason,`${qty(b.distance_mm,'mm')} / need ${qty(b.required_mm,'mm')}`])
+    : [];
+  return `<article class="proposal-card${option.preferred?' preferred':''}">
+    <header><h4>${option.card==='narrow'?'Narrow card · easier to align':'Wide card · larger type'}</h4>
+      ${option.preferred?tag('Preferred suggestion','good'):''}</header>
+    ${facts([['Card size',`${qty(option.width)} × ${qty(option.height)} mm`],
+      ['Sheet',option.paper.toUpperCase()+' '+option.paper_size_mm.join(' × ')+' mm'],
+      ['Body type size',qty(option.type_size,'mm')],
+      ['Heading size',qty(option.heading_size,'mm')],
+      ['Gap to work',qty(option.gap_to_work_mm,'mm')],
+      ['Position from left / floor',`${qty(option.position_mm[0])} / ${qty(option.position_mm[1])} mm`],
+      ['Copy lines',String(option.fitting.lines)],
+      ['Viewpoint legibility',leg?`${e(leg.name)} · ${qty(leg.body_angle_arcmin,'arcmin')} · ${leg.legible?'reads clearly':'below 6 arcmin'}`:'No viewpoint saved']])}
+    ${blocked
+      ? `<p class="note attention">Cannot place here — ${e(blockerRows.map(r=>r[0]).join(', '))}</p>
+         ${table(['Blocks against','Reason','Gap / required'],blockerRows)}`
+      : (option.meets_viewpoint
+          ? '<p class="note good">Clear of neighbouring works and other cards, and legible at the selected viewpoint.</p>'
+          : '<p class="note attention">Fits the gap, but the body type is below six arc minutes at the selected viewpoint.</p>')}
+    <div class="toolline">${btn(option.preferred?'Adopt preferred card':'Adopt this card','adopt-label-card',{card:option.card},option.preferred?'primary':'')}</div>
+  </article>`;
+}
+
+export function labelProposalDialog(id,after) {
+  const active=layout();
+  const current=active.labels.find(row=>row.id===id);
+  if (!current?.placement) throw new Error('Link the label to an artwork first, then propose its card.');
+  const stationOptions=active.stations.map(item=>[item.id,`${item.name} · ${qty(item.distance,'mm')} away`]);
+  const defaultStation=stationOptions.find(([id])=>id===state.stationId)?.[0] || stationOptions[0]?.[0] || '';
+  const controls=stationOptions.length
+    ? choice('station','Readability viewpoint',defaultStation,stationOptions)
+    : '';
+  const load=async fields=>{
+    const query=new URLSearchParams();
+    if (fields.station) query.set('station',fields.station);
+    const report=await request(lurl(`/labels/${id}/proposal?${query}`));
+    state.labelProposal={id, report, station:fields.station || '', after};
+    document.querySelector('#proposal-result').innerHTML=
+      `<p>${e(report.summary)}</p><div class="proposal-grid">${report.options.map(cardBlock).join('')}</div>`;
+    return false;
+  };
+  openDialog('Right-side label card',`<p class="small">Two card stocks trimmed from the paper sizes in hand. The card keeps the layout's label gap to the work and clears neighbouring art, other cards and marked wall features.</p>${controls}<div id="proposal-result" class="full"><p class="small">Preparing the two card options…</p></div>`,
+    load,{wide:true,confirm:'Refresh suggestion'});
+  const form=document.querySelector('#dialog form');
+  form.querySelector('[name=station]')?.addEventListener('change',()=>form.requestSubmit());
+  // Load the initial suggestion once the dialog is on screen.
+  setTimeout(()=>form.requestSubmit(),0);
+}
+
+export async function adoptProposedCard(card) {
+  const pending=state.labelProposal;
+  if (!pending) throw new Error('Open a label card suggestion first.');
+  const {id, station, after}=pending;
+  const response=await request(lurl(`/labels/${id}/proposal`),{method:'POST',
+    body:{revision:state.project.revision,card,station:station||undefined}});
+  // Keep the local revision in step with the saved adoption, otherwise the
+  // next placement edit would be rejected as a stale revision.
+  applyProject(response.project);
+  document.querySelector('#dialog').close();
+  state.labelProposal=null;
+  notify('Card adopted and anchored to the work');
+  await after();
+}
+
 
 export async function wallObservations() {
   const photoView=shot();

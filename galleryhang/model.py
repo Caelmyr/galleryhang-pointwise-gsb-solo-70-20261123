@@ -411,7 +411,7 @@ def label_fields(payload, wall, existing=None):
     return update_fields(mapping(payload, 'Label'), existing or {
         'width':160.0, 'height':95.0, 'x':wall['width']/2, 'y':1200.0, 'name':'',
         'style':'paper', 'body':'', 'align':'left', 'type_size':3.5, 'placement':None,
-        'ink':'#222020', 'paper':'#faf7ef',
+        'ink':'#222020', 'paper':'#faf7ef', 'paper_format':'a4', 'angle':0.0,
     }, {
         'name': lambda x: text(x, 'Label heading', required=False),
         'width': lambda x: number(x, 'Label width in mm', lower=30, upper=700),
@@ -425,4 +425,6 @@ def label_fields(payload, wall, existing=None):
         'placement': lambda x: optional_id(x, 'Artwork placement'),
         'ink': lambda x: color(x, 'Text color'),
         'paper': lambda x: color(x, 'Paper color'),
+        'paper_format': lambda x: choice(x, ('a4', 'letter'), 'paper format'),
+        'angle': lambda x: number(x, 'Label rotation in degrees', lower=-180, upper=180),
     })

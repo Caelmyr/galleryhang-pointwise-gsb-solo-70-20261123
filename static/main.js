@@ -3,7 +3,7 @@ import {artworksPanel,drawNavigation,issuePanel,libraryPanel,loadPanelDetails,pl
 import {arrangement,artDialog,artPreview,calibrateView,confirmDelete,cropArtwork,duplicateArtwork,duplicateLayout,exhibitionDialog,
         foregroundView,labelDialog,layoutComparison,layoutDialog,layoutOptions,markDialog,obstacleDialog,
         paintSample,photoRuler,pickArtwork,placementDialog,shotDialog,stationDialog,wallDialog} from './editing.js';
-import {addObservation,colorsDialog,compareIssuedGeometry,comparePhotos,contactSheetDialog,installationCompare,issueDialog,printLabels,surveyOutline,surveyPicture,verifyIssue,visitRoute,wallObservations} from './review.js';
+import {addObservation,adoptProposedCard,colorsDialog,compareIssuedGeometry,comparePhotos,contactSheetDialog,installationCompare,issueDialog,labelProposalDialog,printLabels,surveyOutline,surveyPicture,verifyIssue,visitRoute,wallObservations} from './review.js';
 
 const root=document.querySelector('#page');
 const dialog=document.querySelector('#dialog');
@@ -117,6 +117,8 @@ const actions={
   obstacle:({id})=>obstacleDialog(id,refresh), 'delete-obstacle':({id})=>confirmDelete('the wall feature',wurl(`/obstacle/${id}`),refresh),
   mark:({id})=>markDialog(id,refresh), 'delete-mark':({id})=>confirmDelete('the existing fixing mark',wurl(`/fixing/${id}`),refresh),
   'add-label':()=>labelDialog(null,refresh), 'edit-label':({id})=>labelDialog(id,refresh),
+  'propose-label-card':({id})=>labelProposalDialog(id,refresh),
+  'adopt-label-card':({card})=>adoptProposedCard(card),
   'print-labels':()=>printLabels(), 'delete-label':({id})=>confirmDelete('the wall label',lurl(`/labels/${id}`),refresh),
   station:({id})=>stationDialog(id,refresh), 'delete-station':({id})=>confirmDelete('the viewing position',lurl(`/stations/${id}`),refresh),
   route:({id})=>{ensure(layout()?.stations.length,'Add a viewing position first.');visitRoute(id,refresh);},

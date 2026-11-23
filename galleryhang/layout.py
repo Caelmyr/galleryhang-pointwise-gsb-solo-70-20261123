@@ -83,6 +83,9 @@ def duplicate_layout(project, layout_id, data):
         label['id'] = new_id()
         if label['placement'] is not None:
             label['placement'] = placement_ids[label['placement']]
+        if label.get('follow'):
+            label['follow']['placement'] = placement_ids[label['follow']['placement']]
+        label.pop('follow_blocked', None)
     station_ids = {}
     for station in duplicate['stations']:
         original_id = station['id']
@@ -112,14 +115,17 @@ def place_work(project, layout_id, data):
 
 
 def edit_placement(project, layout_id, placement_id, data):
+    from .label_placement import follow_moved_placement
     scene = Scene.build(project,layout_id)
     existing = find(scene.layout['placements'],placement_id,'Artwork placement')
     artwork = scene.artworks[existing['artwork']]
     existing.update(placement_fields(data,scene.wall,artwork,existing))
-    return existing, f"Edited placement for {artwork['title']}"
+    follow = follow_moved_placement(scene, existing)
+    return existing, f"Edited placement for {artwork['title']}", follow
 
 
 def delete_placement(project, layout_id, placement_id):
+    from .label_placement import detach_label
     scene = Scene.build(project,layout_id)
     found = find(scene.layout['placements'],placement_id,'Artwork placement')
     if found['pinned']:
@@ -128,16 +134,18 @@ def delete_placement(project, layout_id, placement_id):
     for label in scene.layout['labels']:
         if label['placement'] == placement_id:
             label['placement'] = None
+            detach_label(label)
     return placement_id, f"Removed {scene.artworks[found['artwork']]['title']} from the layout"
 
 
 def place_label(project, layout_id, data, identifier=None):
+    from .label_placement import anchor_label, detach_label
     scene = Scene.build(project,layout_id)
     collection = scene.layout['labels']
     existing = find(collection,identifier,'Label') if identifier else None
     fields = label_fields(data,scene.wall,existing)
-    if fields['placement'] is not None:
-        find(scene.layout['placements'],fields['placement'],'Artwork placement')
+    placement = find(scene.layout['placements'],fields['placement'],'Artwork placement') \
+        if fields['placement'] is not None else None
     if fields['placement'] is None and not fields['name'] and not fields['body']:
         raise InputError('Provide label text or choose an artwork for the label.')
     if existing is None:
@@ -146,6 +154,17 @@ def place_label(project, layout_id, data, identifier=None):
     else:
         existing.update(fields)
         entry = existing
+    wants_anchor = bool(data.get('anchor', False))
+    if placement is not None and wants_anchor:
+        anchor_label(entry, placement)
+        entry.pop('follow_blocked', None)
+    elif entry.get('follow'):
+        # Manual repositioning, relinking to another work or unlinking releases
+        # the anchored follow behavior so hand-entered coordinates are respected.
+        if (placement is None
+                or entry['follow'].get('placement') != placement['id']
+                or wants_anchor is False and any(key in data for key in ('x', 'y', 'angle'))):
+            detach_label(entry)
     return entry, 'Updated label on wall elevation'
 
 
@@ -196,7 +215,12 @@ def footprint(placement, artwork):
 
 
 def label_footprint(label):
-    return local_rectangle(label['width'],label['height']) + np.array([label['x'],label['y']])
+    corners = local_rectangle(label['width'], label['height'])
+    angle = radians(label.get('angle', 0.0))
+    if abs(angle) > 1e-9:
+        turn = np.array([[cos(angle), -sin(angle)], [sin(angle), cos(angle)]])
+        corners = corners @ turn.T
+    return corners + np.array([label['x'], label['y']])
 
 
 def rect_bounds(coordinates):
@@ -274,9 +298,11 @@ def reorder(placements, selected, on_top):
 
 
 def apply_arrangement(project, layout_id, data):
+    from .label_placement import follow_moved_placement
     scene = Scene.build(project,layout_id)
     action = choice(data.get('action'),ACTIONS,'arrangement action')
     selected = check_selection(scene,data,action)
+    follow_summary = {'moved': [], 'held': []}
     if action in ('raise','lower'):
         scene.layout['placements'] = reorder(scene.layout['placements'],selected,action=='raise')
     else:
@@ -290,7 +316,10 @@ def apply_arrangement(project, layout_id, data):
         for entry in changed:
             source = find(scene.layout['placements'],entry['id'],'Placement')
             source.update(placement_fields(entry,scene.wall,scene.artworks[entry['artwork']],source))
-    return scene.layout, f"Applied {action} to {len(selected)} placement(s)"
+            follow = follow_moved_placement(scene, source)
+            follow_summary['moved'].extend(follow['moved'])
+            follow_summary['held'].extend(follow['held'])
+    return scene.layout, f"Applied {action} to {len(selected)} placement(s)", follow_summary
 
 
 def compare_layouts(project, first_id, other_id):

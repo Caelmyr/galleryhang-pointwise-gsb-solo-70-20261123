@@ -6,6 +6,9 @@ from .catalog import catalog_index, contact_sheet, palette_card, palette_sheet
 from .distribution import distribution_report, elevate_distribution
 from .layout import Scene
 from .label_print import PAPER_FORMATS, print_plan, print_wall_labels
+from .label_placement import (
+    CARD_FORMATS, adopt_proposal, follow_report, label_proposal,
+)
 from .lightmap import illumination_picture, lighting_metrics, line_probe, registered_illumination
 from .model import InputError, find, pair, parse_revision
 from .revisions import compare_issues
@@ -102,6 +105,33 @@ def register_additional(api,store):
             return send_file(BytesIO(payload),mimetype='application/pdf',as_attachment=True,
                              download_name=f'wall-labels-{paper}.pdf')
         return jsonify(print_plan(current,paper))
+
+    @api.get('/projects/<project_id>/layouts/<layout_id>/labels/<label_id>/proposal')
+    def label_card_proposal(project_id,layout_id,label_id):
+        current = scene(project_id,layout_id)
+        return jsonify(label_proposal(current,label_id,request.args.get('station')))
+
+    @api.post('/projects/<project_id>/layouts/<layout_id>/labels/<label_id>/proposal')
+    def label_card_adopt(project_id,layout_id,label_id):
+        payload = json_payload()
+        card = payload.get('card','narrow')
+        if card not in CARD_FORMATS:
+            raise InputError('Choose one of the held card formats.')
+        station = payload.get('station') or None
+        adopted = {}
+        def apply(project):
+            current = Scene.build(project,layout_id)
+            label, proposal = adopt_proposal(current,label_id,card,station)
+            adopted['proposal'] = proposal
+            return label, f"Adopted {card} card for {label.get('name') or 'artwork label'}"
+        revision = parse_revision(payload)
+        result = store.update(project_id,revision,apply,'label proposal')
+        project, item = result
+        return jsonify(project=project,item=item,proposal=adopted['proposal']),200
+
+    @api.get('/projects/<project_id>/layouts/<layout_id>/label-follow')
+    def label_follow_state(project_id,layout_id):
+        return jsonify(follow_report(scene(project_id,layout_id)))
 
     @api.get('/projects/<project_id>/artworks/<artwork_id>/palette')
     @limit_image_work

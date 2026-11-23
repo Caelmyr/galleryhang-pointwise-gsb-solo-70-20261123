@@ -203,11 +203,24 @@ def clearance_report(scene):
                           'first_name':left['name'],'second_name':right['name'],'distance':round(distance,2),
                           'target':round(limit,2),'at':None if first is None else
                           [snap_for_output(first),snap_for_output(second)]})
+    held_labels = []
+    for label in scene.layout['labels']:
+        blocked = label.get('follow_blocked')
+        if blocked:
+            held_labels.append({
+                'label': label['id'],
+                'name': label['name'] or 'Artwork label',
+                'placement': blocked['placement'],
+                'attempted_mm': blocked['attempted_mm'],
+                'blockers': blocked['blockers'],
+            })
     return {'wall':scene.wall['name'],'unit':'mm','items':rows,'pairs':pairs,
+            'held_labels': held_labels,
             'summary':{'off_wall':sum(bool(row['outside']) for row in rows),
                        'obstacle_conflicts':sum(bool(row['obstructions']) for row in rows),
                        'overlaps':sum(p['distance']==0 for p in pairs),
-                       'short_gaps':sum(p['distance']>0 for p in pairs)}}
+                       'short_gaps':sum(p['distance']>0 for p in pairs),
+                       'labels_held':len(held_labels)}}
 
 
 def wall_hint(scene, from_point, to_point):

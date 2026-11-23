@@ -2,6 +2,7 @@ export const state = {
   project: null, layoutId: null, wallId: null, shotId: null, stationId: null, routeId: null,
   page: 'library', planView: 'photo', review: 'clearances', selections: [], sceneVersion: 0,
   siteReview: 'coverage', shotCompare: null, issues: [], projects: [], surveyDraft: null,
+  labelProposal: null,
 };
 const esc = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 export const e = value => String(value ?? '').replace(/[&<>"']/g, char => esc[char]);

@@ -250,14 +250,20 @@ export function markDialog(id,after) {
 export function labelDialog(id,after) {
   const current=layout().labels.find(row=>row.id===id);
   const candidates=layout().placements.map(p=>[p.id,art(p.artwork).title]);
+  const anchorNote=current?.follow
+    ? `<p class="note ${current.follow_blocked?'attention':'good'}">${current.follow_blocked
+        ? `Anchored to its work, but held in place: ${e(current.follow_blocked.blockers.map(b=>b.name).join(', '))}`
+        : 'Anchored: this card follows its work at the adopted relative position.'}</p>` : '';
+  const anchorField=current?.placement?check('anchor','Keep relative position when the work moves',Boolean(current?.follow)):'';
+  const suggestButton=current?.placement?btn('Suggest right-side card','propose-label-card',{id:current.id},'primary'):'';
   const values=[choose('placement','Linked work',current?.placement || '',[['','Standalone label'],...candidates]),plain('name','Heading',current?.name),
                 numeric('x','Center from left, mm',current?.x ?? wall().width/2,{min:0,max:wall().width}),
                 numeric('y','Center above floor, mm',current?.y ?? 1200,{min:0,max:wall().height}),
                 numeric('width','Label width, mm',current?.width ?? 160,{min:30,max:700}),numeric('height','Label height, mm',current?.height ?? 95,{min:20,max:500}),
                 choose('style','Backing',current?.style || 'paper',[['paper','Printed card'],['vinyl','Lettering on wall']]),choose('align','Text alignment',current?.align || 'left',[['left','Left'],['center','Centered']]),
                 colorField('ink','Ink color',current?.ink || '#222020'),colorField('paper','Paper color',current?.paper || '#faf7ef'),
-                numeric('type_size','Body letter height, mm',current?.type_size ?? 3.5,{min:2,max:30}),bigText('body','Caption copy',current?.body,600)];
-  const preview=current?`<div class="full"><img style="max-width:380px" src="${e(lurl(`/labels/${id}/preview.png?r=${state.project.revision}`))}" alt="Printed label proof"></div>`:'';
+                numeric('type_size','Body letter height, mm',current?.type_size ?? 3.5,{min:2,max:30}),bigText('body','Caption copy',current?.body,600),anchorField];
+  const preview=current?`<div class="full"><img style="max-width:380px" src="${e(lurl(`/labels/${id}/preview.png?r=${state.project.revision}`))}" alt="Printed label proof"></div>${anchorNote}${suggestButton?'<div class="toolline full">'+suggestButton+'</div>':''}`:'';
   openDialog(current?'Edit wall label':'Add wall label',preview+values.join(''),async fields=>{
     await change(lurl(current?`/labels/${id}`:'/labels'),fields,{method:current?'PATCH':'POST'});
     await after();

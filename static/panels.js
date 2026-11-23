@@ -76,7 +76,20 @@ export function planPanel() {
   const placeActions = activeSelection.length>1
     ? `<h3>Arrange ${activeSelection.length} selected</h3><div class="toolline">${btn('Arrange','arrange')}${btn('Clear selection','clear-selection')}</div>`
     : fitting?`<h3>${e(fittingArt.title)}</h3>${facts([['From left',qty(fitting.x,'mm')],['Above floor',qty(fitting.y,'mm')],['Angle',qty(fitting.angle,'°')]])}<div class="toolline">${btn('Edit position','edit-placement',{id:fitting.id},'primary')}${btn('Deselect','clear-selection')}${fitting.pinned?'':btn('Remove','remove-placement',{id:fitting.id})}</div>`:'';
-  return `<div class="workspace">${headline(activeWall.name,details,actions)}<div class="layout-grid"><div><section class="stage-card"><div class="stage-head">${layoutPicker()}${segment(modes,view,'plan-mode')}${view!=='elevation'?sitePicker():''}</div><div class="frame-screen"><div class="image-stage"><img id="scene-img" src="${e(planRenderUrl(view))}" alt="${e(active.name)} ${e(view==='photo'?'in site photograph':'on measured wall')}">${planDots(active,activeWall,view)}</div></div><div class="stage-foot"><span>${e(active.name)}${shot() && view!=='elevation'?' · '+e(shot().name):''}</span><span><a href="${e(planRenderUrl(view,true))}" download>Save PNG</a></span></div></section><section class="shelf"><div class="panel-head"><h2>Artwork library</h2>${btn('Add artwork','add-art')}</div>${project.artworks.length?`<div class="shelf-grid">${project.artworks.map(item=>artCard(item,true)).join('')}</div>`:empty('Upload an artwork image to put it on the wall.',btn('Add artwork','add-art'))}</section></div><aside class="inspector" aria-label="Layout details"><h2>Layout details</h2>${facts([['Working layout',active.name],['Eye line',qty(active.eye_level,'mm')],['Minimum gap',qty(active.gap,'mm')]])}<div class="toolline">${btn('Edit layout','edit-layout')}${btn('Edit wall','edit-wall')}</div><hr><h2>Artwork positions</h2>${active.placements.length?`<div class="place-list">${active.placements.map(selectableName).join('')}</div><p class="small">Select multiple artworks to align or space them.</p>`:'<p class="empty">No artwork is placed on this wall yet.</p>'}${placeActions}<hr><div class="panel-head"><h2>Exhibition labels</h2>${btn('Add label','add-label')}</div>${active.labels.length?active.labels.map(label=>`<button class="place" type="button" ${attr('edit-label',{id:label.id})}><b>${e(label.name || art(active.placements.find(p=>p.id===label.placement)?.artwork)?.title || 'Artwork label')}</b><span>${e(label.style)}</span></button>`).join(''):'<p class="small">Place labels beside a work or write a standalone caption.</p>'}</aside></div></div>`;
+  return `<div class="workspace">${headline(activeWall.name,details,actions)}<div class="layout-grid"><div><section class="stage-card"><div class="stage-head">${layoutPicker()}${segment(modes,view,'plan-mode')}${view!=='elevation'?sitePicker():''}</div><div class="frame-screen"><div class="image-stage"><img id="scene-img" src="${e(planRenderUrl(view))}" alt="${e(active.name)} ${e(view==='photo'?'in site photograph':'on measured wall')}">${planDots(active,activeWall,view)}</div></div><div class="stage-foot"><span>${e(active.name)}${shot() && view!=='elevation'?' · '+e(shot().name):''}</span><span><a href="${e(planRenderUrl(view,true))}" download>Save PNG</a></span></div></section><section class="shelf"><div class="panel-head"><h2>Artwork library</h2>${btn('Add artwork','add-art')}</div>${project.artworks.length?`<div class="shelf-grid">${project.artworks.map(item=>artCard(item,true)).join('')}</div>`:empty('Upload an artwork image to put it on the wall.',btn('Add artwork','add-art'))}</section></div><aside class="inspector" aria-label="Layout details"><h2>Layout details</h2>${facts([['Working layout',active.name],['Eye line',qty(active.eye_level,'mm')],['Minimum gap',qty(active.gap,'mm')]])}<div class="toolline">${btn('Edit layout','edit-layout')}${btn('Edit wall','edit-wall')}</div><hr><h2>Artwork positions</h2>${active.placements.length?`<div class="place-list">${active.placements.map(selectableName).join('')}</div><p class="small">Select multiple artworks to align or space them.</p>`:'<p class="empty">No artwork is placed on this wall yet.</p>'}${placeActions}<hr><div class="panel-head"><h2>Exhibition labels</h2>${btn('Add label','add-label')}</div>${active.labels.length?active.labels.map(label=>labelItem(label,active)).join(''):'<p class="small">Place labels beside a work or write a standalone caption.</p>'}</aside></div></div>`;
+}
+
+function labelItem(label,active) {
+  const linkedPlacement=active.placements.find(p=>p.id===label.placement);
+  const title=label.name || art(linkedPlacement?.artwork)?.title || 'Artwork label';
+  const held=label.follow_blocked;
+  const status=held?tag('Held: '+held.blockers.map(b=>b.name).join(', '),'attention')
+    :label.follow?tag('Anchored to work','good'):tag(label.style);
+  const suggest=label.placement?btn('Suggest card','propose-label-card',{id:label.id}):'';
+  return `<div class="label-row">
+    <button class="place" type="button" ${attr('edit-label',{id:label.id})}><b>${e(title)}</b><span class="label-status">${status}</span></button>
+    ${suggest}
+  </div>`;
 }
 
 export function artworksPanel() {
@@ -110,7 +123,14 @@ function mountReadout(report) {
 function clearReadout(report) {
   const sums=report.summary;
   const obstacles=report.items.flatMap(item=>item.obstructions.map(o=>[item.name,o.name,qty(o.distance,'mm')]));
-  return metrics([['Outside wall',sums.off_wall],['Feature conflicts',sums.obstacle_conflicts],['Overlaps',sums.overlaps],['Short gaps',sums.short_gaps]])+table(['Item','Against','Gap'],[...obstacles,...report.pairs.map(p=>[p.first_name,p.second_name,qty(p.distance,'mm')])],'No conflicts at the current gap settings.');
+  const held=report.held_labels?.length
+    ? `<h3>Labels held in place while their work moved</h3><p class="small">The anchored card would cover a neighbour or a marked wall item, so it kept its adopted position. Move the work back or re-anchor the card to clear it.</p>`+
+      table(['Label','Blocked by','Gap / required'],report.held_labels.map(item=>[
+        {html:btn(item.name,'edit-label',{id:item.label})},
+        item.blockers.map(b=>b.name).join(', '),
+        item.blockers.map(b=>`${qty(b.distance_mm,'mm')} / ${qty(b.required_mm,'mm')}`).join(', '),
+      ])) : '';
+  return metrics([['Outside wall',sums.off_wall],['Feature conflicts',sums.obstacle_conflicts],['Overlaps',sums.overlaps],['Short gaps',sums.short_gaps],['Labels held',sums.labels_held||0]])+held+table(['Item','Against','Gap'],[...obstacles,...report.pairs.map(p=>[p.first_name,p.second_name,qty(p.distance,'mm')])],'No conflicts at the current gap settings.');
 }
 
 function labelsReadout(report) {
