@@ -66,7 +66,11 @@ def point_rows(mounts):
             yield record['index'],record['title'],record['catalog_number'],'—','—','No attachment recorded'
         for point in record['points']:
             x,y = point['datum_x'],point['datum_y']
-            if point['inside'] and not point['restricted']:
+            adopted = point.get('reuse')
+            if adopted:
+                state = (f"Reuse hole #{adopted['number']} "
+                         f"({reuse_state(adopted)})")
+            elif point['inside'] and not point['restricted']:
                 state = point['nearby_mark']['name'] if point['nearby_mark'] else 'Check on wall'
             else:
                 state = 'Inspect clearance before marking'
@@ -79,6 +83,37 @@ def fixing_section(mounts):
     links = menu([('Fixing schedule','fixings.csv'),('Measured fixing diagram','mounts.png')])
     marks = table(['Order','Work','Catalog','Fixing mark','From datum','Site check'],list(point_rows(mounts)))
     return card('Fixing schedule',entry+links+marks)
+
+
+def reuse_state(row):
+    if row['status'] == 'confirmed':
+        return 'Confirmed'
+    return 'Pending confirmation'
+
+
+def reuse_section(mounts):
+    reuse = mounts.get('reuse')
+    if not reuse:
+        return ''
+    summary = reuse['summary']
+    pending = summary.get('pending', 0)
+    rows = []
+    for row in reuse['assignments']:
+        holes = ', '.join(f"#{hole['number']} {hole.get('name') or ''}".strip() for hole in row['holes'])
+        coordinates = '; '.join(f"#{hole['number']}: {hole['x']:g}, {hole['y']:g} mm" for hole in row['holes'])
+        reason = '; '.join(row.get('reasons', []))
+        rows.append([row['title'], holes, coordinates, number_text(row.get('shift_mm'),'mm'),
+                     reuse_state(row), reason or '—'])
+    entry = (f"<p>{summary['reused_holes']} existing holes reused across {summary['reused_works']} works; "
+             f"{summary['new_hole_points']} new fixing points. Tolerance ±{reuse['tolerance_mm']:g} mm, "
+             f"movement limit {reuse['max_shift_mm']:g} mm.</p>")
+    if pending:
+        entry += (f'<p class="legend warn">{pending} reused hole assignment(s) are pending confirmation: '
+                  'the work or its recorded hole changed after adoption. These are not re-matched to '
+                  'another nearby hole.</p>')
+    table_html = table(['Work','Adopted hole(s)','Hole position','Shift','State','Reason if pending'],
+                       rows,'No existing holes were adopted in this issue.')
+    return card('Adopted existing holes',entry+table_html)
 
 
 def clearance_section(data):
@@ -130,7 +165,8 @@ def handover_html(scene,name,images,reports,proof_only):
     sections = ''
     if not proof_only:
         second_panel += source_section(reports['sources'])
-        sections = fixing_section(reports['mounts']) + clearance_section(reports['clearance']) + label_section(reports['labels'])
+        sections = (reuse_section(reports['mounts']) + fixing_section(reports['mounts'])
+                    + clearance_section(reports['clearance']) + label_section(reports['labels']))
     revision = scene.project['revision']
     heading = f'{scene.wall["name"]} · {scene.layout["name"]} · Revision {revision}'
     page = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'

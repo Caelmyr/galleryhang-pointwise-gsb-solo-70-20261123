@@ -127,10 +127,27 @@ def commissioning_rows(mounts):
                 flags.append('off wall')
             if point['restricted']:
                 flags.extend(item['name'] for item in point['restricted'])
-            if not flags and point['nearby_mark']:
+            adopted = point.get('reuse')
+            if adopted:
+                state = 'confirmed' if adopted['confirmed'] else 'pending confirmation'
+                flags.append(f"reuse hole #{adopted['number']} ({state})")
+            elif not flags and point['nearby_mark']:
                 mark = point['nearby_mark']
                 flags.append(f"{mark['name']} within {mark['distance']:g} mm")
             rows.append([display_name,label,point['name'],datum,weight,', '.join(flags) or '—'])
+    return rows
+
+
+def adopted_hole_rows(mounts):
+    reuse = mounts.get('reuse')
+    if not reuse:
+        return []
+    rows = []
+    for row in reuse['assignments']:
+        for hole in row['holes']:
+            state = 'confirmed' if row['status'] == 'confirmed' else 'pending confirmation'
+            rows.append([row['title'], hole.get('name') or '—', f"#{hole['number']}",
+                         f"{hole['x']:g}, {hole['y']:g}", f"{row.get('shift_mm') or 0:g} mm", state])
     return rows
 
 
@@ -175,10 +192,20 @@ def installation_pdf(scene, snapshot_name, revision, images, reports, *, proof_o
     origin = reports['mounts']['origin']
     book.paragraph(f"Datum at {origin['left']:g} mm from left and {origin['from_floor']:g} mm above floor.")
     book.annotate('Mark positions use measured back details and a planar wall estimate. Confirm surfaces, attachments and loads with the installer before drilling.')
+    reuse = reports['mounts'].get('reuse')
+    if reuse:
+        summary = reuse['summary']
+        book.annotate(f"Existing holes: {summary['reused_holes']} reused across {summary['reused_works']} works, "
+                      f"{summary['new_hole_points']} new fixing points. Planned reuse confirms a pair only when both "
+                      f"fixing points sit within {reuse['tolerance_mm']:g} mm of their own recorded hole.")
     rows = commissioning_rows(reports['mounts'])
     if rows:
         book.table('Fixing points from datum', ['Artwork','Catalog','Fixing','X, Y mm','Weight','Field notes'],
                    rows,[262,116,130,154,100,308])
+    reuse_rows = adopted_hole_rows(reports['mounts'])
+    if reuse_rows:
+        book.table('Adopted existing holes', ['Work','Hole','Number','Hole X, Y mm','Shift','State'],
+                   reuse_rows,[260,150,86,240,110,224])
     clearance = clearance_rows(reports['clearance'])
     if clearance:
         book.table('Clearance checks', ['Item','Against','Condition','Distance / area'],clearance,[292,294,294,190])

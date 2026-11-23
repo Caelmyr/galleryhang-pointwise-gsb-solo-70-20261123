@@ -1,5 +1,6 @@
 from math import hypot
 
+from .adoption import plan_status
 from .clearance import obstacle_outline
 from .layout import artwork_bounds, local_to_wall
 
@@ -43,16 +44,19 @@ def restricted_at(wall,x,y):
     return hits
 
 
-def attachment_points(wall, placement, artwork, tolerance):
+def attachment_points(wall, placement, artwork, tolerance, reuse=None):
     designs = source_attachment(artwork)
     if not designs:
         return []
     coordinates = local_to_wall(placement, [[x,y] for _,x,y in designs])
     points = []
-    for (name,local_x,local_y), (x,y) in zip(designs,coordinates):
+    for index, ((name,local_x,local_y), (x,y)) in enumerate(zip(designs,coordinates)):
         restricted = restricted_at(wall,x,y)
         inside = bool(0 <= x <= wall['width'] and 0 <= y <= wall['height'])
         marks = nearby_marks(wall,x,y,tolerance)
+        adoption = None
+        if reuse is not None:
+            adoption = reuse_for_point(reuse, name)
         points.append({
             'name':name,
             'wall_x':round(float(x),2),
@@ -65,8 +69,26 @@ def attachment_points(wall, placement, artwork, tolerance):
             'restricted':restricted,
             'nearby_mark':marks[0] if marks else None,
             'mark_options':marks,
+            'reuse':adoption,
         })
     return points
+
+
+def reuse_for_point(reuse, point_name):
+    """Match an adopted hole to a fixing point strictly by stored identity.
+
+    Only the hole recorded for this exact point is returned.  If the point is
+    not in the adopted assignment, ``None`` is returned rather than falling
+    back to whatever old hole happens to lie nearest now.
+    """
+    if reuse is None:
+        return None
+    for hole in reuse.get('holes', []):
+        if hole.get('point') == point_name:
+            return {'number': hole['number'], 'name': hole.get('name'), 'x': hole['x'], 'y': hole['y'],
+                    'state': hole.get('state'), 'confirmed': reuse['status'] == 'confirmed',
+                    'status': reuse['status'], 'reasons': reuse.get('reasons', [])}
+    return None
 
 
 def work_order(scene):
@@ -75,9 +97,18 @@ def work_order(scene):
 
 
 def mounting_report(scene,tolerance=18):
+    status = plan_status(scene)
+    reuse_by_placement = {}
+    if status['present']:
+        for row in status['assignments']:
+            reuse_by_placement[row['placement']] = {
+                'title': row['title'], 'status': row['status'], 'reasons': row.get('reasons', []),
+                'shift_mm': row.get('shift_mm'), 'holes': row.get('holes', []),
+            }
     records = []
     for index,placement,artwork in work_order(scene):
-        points = attachment_points(scene.wall,placement,artwork,tolerance)
+        points = attachment_points(scene.wall,placement,artwork,tolerance,
+                                   reuse_by_placement.get(placement['id']))
         bounds = artwork_bounds(placement,artwork)
         records.append({
             'index':index,
@@ -93,12 +124,30 @@ def mounting_report(scene,tolerance=18):
             'mount':ATTACHMENT_NAMES[artwork['attachment']],
             'pinned':placement['pinned'],
             'points':points,
+            'reuse_status':reuse_by_placement.get(placement['id'], {}).get('status'),
             'needs_field_check':not points or any(not p['inside'] or p['restricted'] for p in points),
         })
     return {'wall':scene.wall['name'],'origin':{'left':scene.wall['datum'][0],'from_floor':scene.wall['datum'][1]},
             'wall_size':[scene.wall['width'],scene.wall['height']],'unit':'mm','tolerance':tolerance,
             'work_count':len(records),'point_count':sum(len(row['points']) for row in records),
-            'work_without_verified_clearance':sum(row['needs_field_check'] for row in records),'works':records}
+            'work_without_verified_clearance':sum(row['needs_field_check'] for row in records),
+            'reuse':reuse_summary(status),'works':records}
+
+
+def reuse_summary(status):
+    if not status['present']:
+        return None
+    return {'plan':status['id'],'created':status['created'],
+            'tolerance_mm':status['tolerance_mm'],'max_shift_mm':status['max_shift_mm'],
+            'summary':status['summary'],
+            'assignments':[{'placement':row['placement'],'title':row['title'],
+                            'status':row['status'],'reasons':row.get('reasons', []),
+                            'shift_mm':row.get('shift_mm'),
+                            'holes':[{'number':hole['number'],'name':hole.get('name'),
+                                      'x':hole['x'],'y':hole['y'],'point':hole.get('point'),
+                                      'side':hole.get('side'),'state':hole.get('state')}
+                                     for hole in row.get('holes', [])]}
+                           for row in status['assignments']]}
 
 
 def mounting_csv(report):
@@ -106,17 +155,25 @@ def mounting_csv(report):
         'order','artwork','catalog_number','weight_kg','attachment_type','point',
         'wall_x_mm','wall_y_mm','datum_x_mm','datum_y_mm','object_back_x_mm','object_back_y_mm',
         'field_check','nearest_existing_mark','nearest_existing_mark_gap_mm',
+        'adopted_hole_number','adopted_hole_name','adopted_hole_x_mm','adopted_hole_y_mm','reuse_status',
     ]
     rows = []
     for work in report['works']:
         base = [work['index'],work['title'],work['catalog_number'],work['weight'],work['mount']]
         if not work['points']:
-            rows.append([*base,None,None,None,None,None,None,None,'attachment not measured',None,None])
+            rows.append([*base,None,None,None,None,None,None,None,'attachment not measured',None,None,
+                         None,None,None,None,None])
         for point in work['points']:
             nearby = point['nearby_mark']
+            adopted = point.get('reuse')
             rows.append([
                 *base,point['name'],point['wall_x'],point['wall_y'],point['datum_x'],point['datum_y'],
                 point['back_x'],point['back_y'],'review at site' if point['restricted'] or not point['inside'] else '',
                 nearby['name'] if nearby else None,nearby['distance'] if nearby else None,
+                adopted['number'] if adopted else None,
+                adopted['name'] if adopted else None,
+                adopted['x'] if adopted else None,
+                adopted['y'] if adopted else None,
+                adopted['status'] if adopted else None,
             ])
     return headers,rows

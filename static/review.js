@@ -1,5 +1,5 @@
 import {state,e,photo,purl,lurl,wurl,layout,wall,shot,art,qty,percent,opts,choices,btn,link,tag,table,metrics,
-        field,numeric,request,change,openDialog,notify} from './ui.js';
+        field,numeric,request,change,openDialog,notify,formValues} from './ui.js';
 import {imagePicker} from './editing.js';
 
 const choice = (name,label,value,options) => field(name,label,value,{type:'select',options});
@@ -159,8 +159,53 @@ export function compareIssuedGeometry() {
   },{confirm:'Compare issues',wide:true});
 }
 
-export function printLabels() {
-  const fields=choice('paper','Paper size','a4',[['a4','A4'],['letter','US Letter']])+`<div id="label-print-plan" class="full"></div>`;
+export function reusePlanDialog(after) {
+  const original=layout().reuse_plan;
+  const controls=numeric('tolerance','Fixing-point tolerance, mm',original?.tolerance_mm ?? 3,{min:0,max:25,step:0.5})+
+    numeric('max_shift','Largest horizontal move, mm',original?.max_shift_mm ?? 80,{min:0,max:500,step:1})+
+    `<div class="full" id="reuse-preview"></div>`;
+  let evaluation=null;
+  const form=openDialog('Plan reuse of existing holes',controls,async fields=>{
+    await change(lurl('/reuse'),fields);
+    state.review='reuse';
+    notify('Hole-reuse plan saved');
+    await after();
+  },{wide:true,confirm:'Save this plan'});
+  const refresh=async()=>{
+    const values=formValues(form);
+    const query=new URLSearchParams({tolerance:values.tolerance,max_shift:values.max_shift,r:state.project.revision});
+    try {
+      const fill=form.querySelector('#reuse-preview');
+      const result=await request(lurl(`/reuse?${query}`));
+      evaluation=result.preview;
+      if (result.preview?.error) { fill.innerHTML=`<p class="error">${e(result.preview.error)}</p>`; return; }
+      const summary=result.preview.summary;
+      fill.innerHTML=metrics([['Old holes reused',summary.reused_holes],['New holes',summary.new_hole_points],['Works moved',summary.works_moved],['Largest gap change',qty(summary.max_gap_change,'mm')]])+
+        `<img src="${e(lurl(`/reuse.png?${query}`))}" alt="Recommended reuse of existing holes">`+
+        table(['Work','Placement','Adopted holes','Shift'],result.preview.works.map(row=>[row.title,row.status,row.reused?row.holes.map(h=>`#${h.number}`).join(', '):`${row.new_holes.length} new hole${row.new_holes.length===1?'':'s'}`,qty(row.shift_mm,'mm')]),'No artworks placed on the wall.');
+    } catch (error) { form.querySelector('#reuse-preview').innerHTML=`<p class="error">${e(error.message)}</p>`; }
+  };
+  for (const input of form.querySelectorAll('input[type="number"]')) {
+    input.addEventListener('change',refresh);
+  }
+  refresh();
+}
+
+export function adoptReusePlan(after) {
+  const plan=layout().reuse_plan;
+  if (!plan) throw new Error('Plan and save the reuse of existing holes first.');
+  const pending=plan.summary?.reused_holes ?? 0;
+  openDialog('Adopt this hole-reuse plan?',
+    `<p>This will shift ${e(plan.summary.works_moved)} work(s) to reuse ${e(pending)} recorded hole(s). Heights and rotations stay unchanged, and any work that needs new holes keeps its position.</p><p class="small">After adoption, moving a work or editing a reused hole marks that reuse as pending confirmation; it will not be re-matched to another hole automatically.</p>`,
+    async()=>{
+      await change(lurl('/reuse/adopt'),{plan:plan.id});
+      state.review='reuse';
+      notify('Adopted hole-reuse plan');
+      await after();
+    },{confirm:'Adopt plan',simple:true});
+}
+
+export function printLabels() {  const fields=choice('paper','Paper size','a4',[['a4','A4'],['letter','US Letter']])+`<div id="label-print-plan" class="full"></div>`;
   openDialog('Print wall label cards',fields,async data=>{
     const report=await request(lurl(`/label-print?paper=${data.paper}`));
     const cards=report.cards.map(card=>[card.title,card.sheet,card.size_mm.join(' × ')+' mm']);

@@ -10,6 +10,8 @@ from .lightmap import illumination_picture, lighting_metrics, line_probe, regist
 from .model import InputError, find, pair, parse_revision
 from .revisions import compare_issues
 from .print_target import print_mount_card
+from .model import InputError, find, pair, parse_revision
+from .reuse import adopt_plan, reuse_report, save_plan
 from .survey import delete_survey, save_survey, survey_picture, survey_report
 from .tour import draw_tour, edit_route, remove_route, tour_report
 
@@ -20,6 +22,38 @@ def register_additional(api,store):
 
     def scene(project_id,layout_id):
         return Scene.build(store.get(project_id),layout_id)
+
+    @api.get('/projects/<project_id>/layouts/<layout_id>/reuse')
+    def reuse_plan(project_id,layout_id):
+        from .reuse import DEFAULT_MAX_SHIFT, DEFAULT_TOLERANCE, plan_reuse
+        current = scene(project_id,layout_id)
+        tolerance = query_number('tolerance',DEFAULT_TOLERANCE,0,25)
+        max_shift = query_number('max_shift',DEFAULT_MAX_SHIFT,0,500)
+        report = reuse_report(current)
+        if report['plan'] is None:
+            try:
+                report['preview'] = plan_reuse(current,tolerance=tolerance,max_shift=max_shift)
+            except InputError as error:
+                report['preview'] = {'error':str(error)}
+        return jsonify(report)
+
+    @api.get('/projects/<project_id>/layouts/<layout_id>/reuse.png')
+    @limit_image_work
+    def reuse_picture(project_id,layout_id):
+        from .reuse import DEFAULT_MAX_SHIFT, DEFAULT_TOLERANCE
+        from .reuse_render import reuse_diagram
+        tolerance = query_number('tolerance',DEFAULT_TOLERANCE,0,25)
+        max_shift = query_number('max_shift',DEFAULT_MAX_SHIFT,0,500)
+        return image_response(reuse_diagram(store.blobs,scene(project_id,layout_id),
+                                            tolerance=tolerance,max_shift=max_shift))
+
+    @api.post('/projects/<project_id>/layouts/<layout_id>/reuse')
+    def save_reuse_plan(project_id,layout_id):
+        return mutate(store,project_id,save_plan,'hole reuse',layout_id)
+
+    @api.post('/projects/<project_id>/layouts/<layout_id>/reuse/adopt')
+    def adopt_reuse_plan(project_id,layout_id):
+        return mutate(store,project_id,adopt_plan,'hole reuse',layout_id)
 
     @api.get('/projects/<project_id>/layouts/<layout_id>/observations')
     def layout_observations(project_id,layout_id):

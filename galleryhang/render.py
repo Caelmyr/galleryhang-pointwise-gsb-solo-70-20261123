@@ -229,6 +229,12 @@ def annotate_installation(scene,canvas):
             tone = '#d74630' if not point['inside'] or point['restricted'] else '#ffe067'
             plot_cross(draw,coordinates,7,'#29231e',width=4)
             plot_cross(draw,coordinates,7,tone,width=2)
+            adopted = point.get('reuse')
+            if adopted:
+                color = '#9fe0c1' if adopted['confirmed'] else '#f0b48c'
+                draw.text((coordinates[0]+10,coordinates[1]-8),
+                          f"#{adopted['number']}"+('' if adopted['confirmed'] else ' ?'),
+                          font=font(12,heading=True),fill=color,stroke_width=2,stroke_fill='#211f1c')
     for mark in scene.wall['mount_marks']:
         x,y = wall_to_pixels(scene.wall,canvas.size,[mark['x'],mark['y']])
         if mark['usable']:

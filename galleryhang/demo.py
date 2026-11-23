@@ -241,6 +241,34 @@ def fill_artwork(blobs,index,sample):
     return new_artwork(fields,photo)
 
 
+def demo_holes(artworks, layout):
+    """Old holes from the previous hang, plus distractors a planner must reject."""
+    catalog = {row['id']: row for row in artworks}
+    placements = layout['placements']
+    holes = []
+    offsets = ((-10.0, 1.5, -0.5), (1.0, 0.0, 0.0))
+    for index, placement in enumerate(placements[:2]):
+        artwork = catalog[placement['artwork']]
+        side = artwork['width'] * artwork['fixing_span'] / 2
+        top = placement['y'] + artwork['height'] / 2 - artwork['fixing_top']
+        dx, left_dy, right_dy = offsets[index]
+        for suffix, direction, dy in (('left', -1.0, left_dy), ('right', 1.0, right_dy)):
+            holes.append({'id':new_id(),'name':f"Previous hang {index+1} {suffix}",
+                          'kind':'hole','x':round(placement['x'] + direction*side + dx,1),
+                          'y':round(top + dy,1),'usable':True,'note':'Measured from the previous hang.'})
+    first = placements[0]
+    first_art = catalog[first['artwork']]
+    side = first_art['width'] * first_art['fixing_span'] / 2
+    top = first['y'] + first_art['height'] / 2 - first_art['fixing_top']
+    holes.append({'id':new_id(),'name':'Previous hole · mid wall','kind':'hole',
+                  'x':round(first['x'] + side - 1.0,1),'y':round(top,1),'usable':True,
+                  'note':'A near miss that is not the hole the right fixing point used.'})
+    holes.append({'id':new_id(),'name':'Old hole · filled','kind':'hole',
+                  'x':round(first['x'] - side + 6.0,1),'y':round(top - 30.0,1),'usable':False,
+                  'note':'Filled and not reusable.'})
+    return holes
+
+
 def demo_wall(blobs):
     wall = new_wall({'name':'West wall', 'width':5400.0, 'height':3050.0,'paint':'#ddd3bd',
                      'baseboard':83.0,'datum':[450.0,410.0],
@@ -312,6 +340,7 @@ def build_demo(blobs):
     wall = demo_wall(blobs)
     project['walls'] = [wall]
     layout = example_layout(wall,project['artworks'])
+    wall['mount_marks'] = demo_holes(project['artworks'],layout)
     project['layouts'] = [layout]
     wall['shots'].append(synthetic_installation(blobs,project,wall,layout))
     return project

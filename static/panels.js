@@ -4,7 +4,7 @@ import {state,e,photo,purl,lurl,wurl,surl,layout,wall,shot,art,station,route,pla
 const sections = [['plan','▤','Wall plan'],['sites','◇','Site photographs'],['artworks','▧','Artworks'],
                   ['view','◉','Viewing positions'],['review','⊞','Checks'],['issues','▣','Issues']];
 const planViews = [['photo','Site preview'],['elevation','Elevation'],['registered','Aligned photo']];
-const reviewTabs = [['clearances','Clearances'],['mounts','Fixing points'],['labels','Labels'],['balance','Wall balance'],['survey','Installed check']];
+const reviewTabs = [['clearances','Clearances'],['mounts','Fixing points'],['reuse','Hole reuse'],['labels','Labels'],['balance','Wall balance'],['survey','Installed check']];
 
 export function drawNavigation() {
   const navigation = document.querySelector('#navigation');
@@ -103,8 +103,16 @@ export function sitePanel() {
 
 function mountReadout(report) {
   const headers = ['Work','Attachment','Point from datum','Existing mark'];
-  const lines = report.works.flatMap(work => work.points.length ? work.points.map(p=>[work.title,p.name,`${qty(p.datum_x)}, ${qty(p.datum_y)} mm`,p.nearby_mark?.name || '—']) : [[work.title,work.mount,'—','—']]);
-  return metrics([['Artwork positions',report.work_count],['Fixing points',report.point_count],['Field checks',report.work_without_verified_clearance]])+`<p class="small">Datum ${qty(report.origin.left,'mm')} from left, ${qty(report.origin.from_floor,'mm')} above floor.</p>`+table(headers,lines,'Place artworks to see fixing positions.');
+  const mark = point => point.reuse
+    ? `Reuse #${point.reuse.number} · ${point.reuse.status==='confirmed'?'confirmed':'pending'}`
+    : (point.nearby_mark?.name || '—');
+  const lines = report.works.flatMap(work => work.points.length ? work.points.map(p=>[work.title,p.name,`${qty(p.datum_x)}, ${qty(p.datum_y)} mm`,mark(p)]) : [[work.title,work.mount,'—','—']]);
+  const reuse = report.reuse
+    ? `<p class="${report.reuse.summary.pending?'note':'small'}">${report.reuse.summary.pending
+        ? `${report.reuse.summary.pending} adopted reuse${report.reuse.summary.pending===1?' needs':'s need'} confirmation.`
+        : `${report.reuse.summary.reused_holes} old holes adopted across ${report.reuse.summary.reused_works} works.`}</p>`
+    : '';
+  return metrics([['Artwork positions',report.work_count],['Fixing points',report.point_count],['Field checks',report.work_without_verified_clearance]])+reuse+`<p class="small">Datum ${qty(report.origin.left,'mm')} from left, ${qty(report.origin.from_floor,'mm')} above floor.</p>`+table(headers,lines,'Place artworks to see fixing positions.');
 }
 
 function clearReadout(report) {
@@ -125,19 +133,46 @@ function surveyReadout(response) {
   return metrics([['Observed outlines',response.count],['Needs review',response.review_count]])+table(['Artwork','State','Observed center','Recorded view'],response.checks.map(row=>[{html:btn(row.title,'survey-picture',{id:row.id})},row.conclusion.status,row.observed.center.map(v=>qty(v)).join(', ')+' mm',row.current_source]),'Mark a work’s four visible corners on an installation photograph to check placement.');
 }
 
+function reuseReadout(report) {
+  const plan=report.plan, status=report.status;
+  if (!plan && report.preview?.error) return `<p class="error">${e(report.preview.error)}</p>`;
+  if (!plan) {
+    const summary=report.preview?.summary;
+    return (summary?metrics([['Old holes reused',summary.reused_holes],['New holes',summary.new_hole_points],['Works moved',summary.works_moved],['Largest gap change',qty(summary.max_gap_change,'mm')]]):'')+
+      table(['Work','Placement','Adopted holes','Shift'],report.preview.works.map(row=>[row.title,row.status,row.reused?row.holes.map(h=>`#${h.number}`).join(', '):`${row.new_holes.length} new hole${row.new_holes.length===1?'':'s'}`,qty(row.shift_mm,'mm')]),'Place two-point works on the wall to compare their fixings with the recorded holes.')+
+      gapTable(report.preview.gaps)+
+      `<p class="small">Nothing is adopted yet. Review the diagram, then save and adopt the plan from the button above.</p>`;
+  }
+  const pending=status.summary.pending;
+  const body=`<p>${pending?`<strong>${pending} adopted reuse${pending===1?' needs':'s need'} confirmation.</strong> `:''}Plan adopted ${e(shortDate(plan.created))}. ${e(plan.summary.reused_holes)} old holes across ${e(plan.summary.reused_works)} works; ${e(plan.summary.new_hole_points)} new holes.</p>`+
+    table(['Work','Adopted holes','Hole position','Shift','State','Reason'],status.assignments.map(row=>[row.title,row.holes.map(h=>`#${h.number}`).join(', '),row.holes.map(h=>`${qty(h.x)}, ${qty(h.y)} mm`).join('; '),qty(row.shift_mm,'mm'),row.status==='confirmed'?'Confirmed':'Pending',row.reasons.join('; ')||'—']),'No reuse was adopted in this issue.')+
+    gapTable(status.gaps);
+  return body;
+}
+
+function gapTable(gaps) {
+  if (!gaps || !gaps.length) return '';
+  return table(['Between','Original gap','Planned gap','Change','Minimum'],gaps.map(gap=>[`${gap.first_title} · ${gap.second_title}`,qty(gap.original_mm,'mm'),qty(gap.planned_mm,'mm'),gap.direction==='unchanged'?'unchanged':`${qty(gap.change_mm,'mm')} ${gap.direction}`,qty(gap.minimum_mm,'mm')]),'One work on the wall has no neighbouring gap.');
+}
+
 export function reviewPanel() {
-  if (!layout()) return preLayoutPage('Checks','Review the clear area, fixing points, wall labels, and image evidence.');
+  if (!layout()) return preLayoutPage('Checks','Review the clear area, fixing points, existing holes, wall labels, and image evidence.');
   const variant = state.review;
   const mode = variant==='mounts' || variant==='clearances' ? variant : 'elevation';
   const snapshot = layout().installed_surveys?.at(-1);
   let image;
-  if (variant==='balance') image=imageQuery(lurl('/balance.png'),{});
+  if (variant==='reuse') image=imageQuery(lurl('/reuse.png'),{});
+  else if (variant==='balance') image=imageQuery(lurl('/balance.png'),{});
   else if (variant==='survey' && snapshot) image=imageQuery(lurl(`/surveys/${snapshot.id}/preview.png`),{});
   else image=planRenderUrl(mode);
-  const action = variant==='survey'?btn('Measure installed outline','survey')+btn('Compare with plan','check-installed'):
+  const action = variant==='reuse'?btn('Plan hole reuse','reuse-plan',{},'primary')+
+      (layout().reuse_plan && !layout().reuse_plan.adopted?btn('Adopt saved plan','reuse-adopt'):'')+
+      link('Download diagram',imageQuery(lurl('/reuse.png'),{download:'1'})):
+    variant==='survey'?btn('Measure installed outline','survey')+btn('Compare with plan','check-installed'):
     variant==='labels'?btn('Place label','add-label')+btn('Print label cards','print-labels'):
     variant==='balance'?'':link('Download diagram',planRenderUrl(mode,true));
-  return `<div class="workspace">${headline('Installation checks',`${wall().name} · ${layout().name}`,btn('Save an issue','new-issue',{},'primary'))}<div class="toolline">${layoutPicker()}${segment(reviewTabs,variant,'review-mode')}</div><div class="review-layout">${panel(variant==='survey'?'Observed and planned outlines':'Wall diagram',`<img src="${e(image)}" alt="Annotated wall review">`)}${panel('Review readings','<div id="review-readout">Checking layout…</div>',action)}</div></div>`;
+  const panelTitle = variant==='reuse'?'Planned hole reuse':variant==='survey'?'Observed and planned outlines':'Wall diagram';
+  return `<div class="workspace">${headline('Installation checks',`${wall().name} · ${layout().name}`,btn('Save an issue','new-issue',{},'primary'))}<div class="toolline">${layoutPicker()}${segment(reviewTabs,variant,'review-mode')}</div><div class="review-layout">${panel(panelTitle,`<img src="${e(image)}" alt="Annotated wall review">`,action)}${panel('Review readings','<div id="review-readout">Checking layout…</div>')}</div></div>`;
 }
 
 function tourResult(report) {
@@ -177,8 +212,8 @@ export function loadPanelDetails() {
   }
   if (state.page==='review' && layout()) {
     const variant=state.review;
-    const generators={mounts:mountReadout,clearances:clearReadout,labels:labelsReadout,balance:distributionReadout,survey:surveyReadout};
-    const path=variant==='balance'?'/balance':variant==='survey'?'/surveys':`/audit?kind=${variant}`;
+    const generators={mounts:mountReadout,clearances:clearReadout,labels:labelsReadout,balance:distributionReadout,survey:surveyReadout,reuse:reuseReadout};
+    const path=variant==='reuse'?'/reuse':variant==='balance'?'/balance':variant==='survey'?'/surveys':`/audit?kind=${variant}`;
     loadInside('review-readout',lurl(path),generators[variant]);
   }
   if (state.page==='view' && station()) loadInside('viewer-readout',lurl(`/stations/${station().id}/readout`),viewerResult);

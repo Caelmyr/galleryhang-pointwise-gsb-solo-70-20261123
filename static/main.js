@@ -3,7 +3,7 @@ import {artworksPanel,drawNavigation,issuePanel,libraryPanel,loadPanelDetails,pl
 import {arrangement,artDialog,artPreview,calibrateView,confirmDelete,cropArtwork,duplicateArtwork,duplicateLayout,exhibitionDialog,
         foregroundView,labelDialog,layoutComparison,layoutDialog,layoutOptions,markDialog,obstacleDialog,
         paintSample,photoRuler,pickArtwork,placementDialog,shotDialog,stationDialog,wallDialog} from './editing.js';
-import {addObservation,colorsDialog,compareIssuedGeometry,comparePhotos,contactSheetDialog,installationCompare,issueDialog,printLabels,surveyOutline,surveyPicture,verifyIssue,visitRoute,wallObservations} from './review.js';
+import {addObservation,adoptReusePlan,colorsDialog,compareIssuedGeometry,comparePhotos,contactSheetDialog,installationCompare,issueDialog,printLabels,reusePlanDialog,surveyOutline,surveyPicture,verifyIssue,visitRoute,wallObservations} from './review.js';
 
 const root=document.querySelector('#page');
 const dialog=document.querySelector('#dialog');
@@ -126,6 +126,7 @@ const actions={
   survey:()=>{ensure(wall()?.shots.length,'Import the installation photograph first.');surveyOutline(refresh);},
   'survey-picture':({id})=>surveyPicture(id), 'delete-survey':({id})=>confirmDelete('the measured outline',lurl(`/surveys/${id}`),refresh),
   palette:()=>{ensure(state.project.artworks.length,'Add at least one artwork first.');colorsDialog();},
+  'reuse-plan':()=>reusePlanDialog(refresh), 'reuse-adopt':()=>adoptReusePlan(refresh),
   'contact-sheet':()=>{ensure(state.project.artworks.length,'Add at least one artwork first.');contactSheetDialog();},
   'new-issue':()=>issueDialog(async()=>{activePage('issues');await refresh();}), 'verify-issue':()=>verifyIssue(), 'compare-issues':()=>compareIssuedGeometry(),
 };
